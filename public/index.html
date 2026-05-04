@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LiveKit Audio Call</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- LiveKit Browser SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+</head>
+<body>
+  <main class="page">
+    <section class="card">
+      <div class="top-row">
+        <div>
+          <h1>Audio Call</h1>
+          <p>Simple LiveKit audio rooms for 2 or more users.</p>
+        </div>
+        <span id="connectionDot" class="dot offline"></span>
+      </div>
+
+      <form id="joinForm" class="form">
+        <label for="username">Your name</label>
+        <input id="username" type="text" placeholder="Example: Hamza" autocomplete="name" required />
+
+        <label for="roomName">Room name</label>
+        <input id="roomName" type="text" placeholder="Example: test-room1" value="test-room1" required />
+
+        <div class="button-grid" id="joinLeaveRow">
+          <button id="joinBtn" type="submit" class="btn dark">Join Call</button>
+          <button id="leaveBtn" type="button" class="btn danger hidden">Leave Call</button>
+        </div>
+      </form>
+
+      <div class="status-box">
+        <span>Status:</span>
+        <strong id="statusText">Not connected</strong>
+      </div>
+
+      <div class="controls">
+        <button id="micBtn" type="button" class="btn purple" disabled>Mute Microphone</button>
+        <button id="speakerBtn" type="button" class="btn blue" disabled>Use Loud Speaker</button>
+      </div>
+
+      <p id="deviceHelp" class="device-help">
+        Default audio starts as normal/ear speaker where your mobile browser supports it. Tap “Use Loud Speaker” to switch output when supported.
+      </p>
+
+      <div class="room-help">
+        <strong>Multiple rooms:</strong>
+        Users with the same room name join the same call. Use different room names for separate calls.
+      </div>
+
+      <div class="section-title">
+        <h2>Participants</h2>
+        <span id="participantCount">0</span>
+      </div>
+
+      <div id="participants" class="participants">
+        <div class="empty">No participants yet.</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
