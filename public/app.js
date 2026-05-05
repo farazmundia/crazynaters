@@ -1,54 +1,31 @@
-const LiveKit = window.LivekitClient;
+const {
+  Room,
+  RoomEvent,
+  Track,
+  createLocalAudioTrack,
+} = LivekitClient;
 
 let room = null;
 let localAudioTrack = null;
-let micMuted = false;
-let loudSpeakerEnabled = false;
-let currentRoomName = "";
+let microphoneMuted = false;
 
-function $(id) {
-  return document.getElementById(id);
-}
+const usernameInput = document.getElementById("username");
+const roomNameInput = document.getElementById("roomName");
+const joinBtn = document.getElementById("joinBtn");
+const leaveBtn = document.getElementById("leaveBtn");
+const micBtn = document.getElementById("micBtn");
+const statusText = document.getElementById("statusText");
+const participantsDiv = document.getElementById("participants");
+const participantCount = document.getElementById("participantCount");
+const connectionDot = document.getElementById("connectionDot");
 
-document.addEventListener("DOMContentLoaded", () => {
-  const joinForm = $("joinForm");
-  const joinBtn = $("joinBtn");
-  const leaveBtn = $("leaveBtn");
-  const micBtn = $("micBtn");
-  const speakerBtn = $("speakerBtn");
-
-  loadRoomFromUrl();
-  resetUI();
-
-  if (joinForm) {
-    joinForm.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await joinCall();
-    });
-  } else if (joinBtn) {
-    joinBtn.addEventListener("click", joinCall);
-  }
-
-  if (leaveBtn) leaveBtn.addEventListener("click", leaveCall);
-  if (micBtn) micBtn.addEventListener("click", toggleMicrophone);
-  if (speakerBtn) speakerBtn.addEventListener("click", toggleSpeaker);
-});
-
-function loadRoomFromUrl() {
-  const roomNameInput = $("roomName");
-  const params = new URLSearchParams(window.location.search);
-  const roomFromUrl = params.get("room");
-
-  if (roomNameInput && roomFromUrl) {
-    roomNameInput.value = roomFromUrl;
-  }
-}
+joinBtn.addEventListener("click", joinCall);
+leaveBtn.addEventListener("click", leaveCall);
+micBtn.addEventListener("click", toggleMicrophone);
 
 async function joinCall() {
-  const usernameInput = $("username");
-  const roomNameInput = $("roomName");
-  const username = usernameInput?.value.trim();
-  const roomName = roomNameInput?.value.trim();
+  const username = usernameInput.value.trim();
+  const roomName = roomNameInput.value.trim();
 
   if (!username || !roomName) {
     alert("Please enter your name and room name.");
@@ -56,9 +33,8 @@ async function joinCall() {
   }
 
   try {
-    currentRoomName = roomName;
+    joinBtn.disabled = true;
     setStatus("Getting token...");
-    setButtonsLoading(true);
 
     const response = await fetch("/get-token", {
       method: "POST",
@@ -74,7 +50,7 @@ async function joinCall() {
 
     setStatus("Connecting...");
 
-    room = new LiveKit.Room({
+    room = new Room({
       adaptiveStream: true,
       dynacast: true,
     });
@@ -83,247 +59,153 @@ async function joinCall() {
 
     await room.connect(data.livekitUrl, data.token);
 
-    // Mic is ON by default after joining.
-    localAudioTrack = await LiveKit.createLocalAudioTrack({
+    localAudioTrack = await createLocalAudioTrack({
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
     });
 
     await room.localParticipant.publishTrack(localAudioTrack);
-    micMuted = false;
-    loudSpeakerEnabled = false;
 
-    setStatus(`Connected to ${roomName}`);
-    setConnectedUI(true);
+    microphoneMuted = false;
+    updateConnectedUI(roomName);
     renderParticipants();
   } catch (error) {
     console.error(error);
-    setStatus("Connection failed");
-    setConnectedUI(false);
-    alert(error.message || "Unable to join call");
-  } finally {
-    setButtonsLoading(false);
+    alert(error.message || "Connection failed");
+    resetUI();
   }
 }
 
 function setupRoomEvents() {
-  if (!room) return;
+  room.on(RoomEvent.ParticipantConnected, renderParticipants);
+  room.on(RoomEvent.ParticipantDisconnected, renderParticipants);
+  room.on(RoomEvent.ActiveSpeakersChanged, renderParticipants);
 
-  room.on(LiveKit.RoomEvent.ParticipantConnected, renderParticipants);
-  room.on(LiveKit.RoomEvent.ParticipantDisconnected, renderParticipants);
-  room.on(LiveKit.RoomEvent.ActiveSpeakersChanged, renderParticipants);
-
-  room.on(LiveKit.RoomEvent.TrackSubscribed, (track) => {
-    if (track.kind === LiveKit.Track.Kind.Audio) {
+  room.on(RoomEvent.TrackSubscribed, (track) => {
+    if (track.kind === Track.Kind.Audio) {
       const audioElement = track.attach();
       audioElement.autoplay = true;
       audioElement.playsInline = true;
-      audioElement.className = "remote-audio";
       document.body.appendChild(audioElement);
-
-      applySpeakerPreferenceToAudio(audioElement);
     }
   });
 
-  room.on(LiveKit.RoomEvent.TrackUnsubscribed, (track) => {
+  room.on(RoomEvent.TrackUnsubscribed, (track) => {
     track.detach().forEach((element) => element.remove());
   });
 
-  room.on(LiveKit.RoomEvent.Disconnected, () => {
-    cleanupAfterDisconnect();
-  });
+  room.on(RoomEvent.Disconnected, resetUI);
 }
 
 async function toggleMicrophone() {
-  const micBtn = $("micBtn");
-
   if (!localAudioTrack) return;
 
-  micMuted = !micMuted;
+  microphoneMuted = !microphoneMuted;
+  await localAudioTrack.setMuted(microphoneMuted);
 
-  if (micMuted) {
-    await localAudioTrack.mute();
-    if (micBtn) micBtn.textContent = "Unmute Microphone";
-  } else {
-    await localAudioTrack.unmute();
-    if (micBtn) micBtn.textContent = "Mute Microphone";
-  }
+  micBtn.textContent = microphoneMuted ? "Unmute Microphone" : "Mute Microphone";
+  micBtn.classList.toggle("muted", microphoneMuted);
 }
 
-async function toggleSpeaker() {
-  const speakerBtn = $("speakerBtn");
-  const deviceHelp = $("deviceHelp");
+function renderParticipants() {
+  if (!room) return;
 
-  loudSpeakerEnabled = !loudSpeakerEnabled;
+  participantsDiv.innerHTML = "";
 
-  if (speakerBtn) {
-    speakerBtn.textContent = loudSpeakerEnabled ? "Use Ear Speaker" : "Use Loud Speaker";
-  }
+  const activeSpeakerIds = new Set(
+    room.activeSpeakers.map((participant) => participant.identity)
+  );
 
-  const audios = document.querySelectorAll("audio.remote-audio");
+  const allParticipants = [
+    {
+      identity: room.localParticipant.identity,
+      isLocal: true,
+      isSpeaking: activeSpeakerIds.has(room.localParticipant.identity),
+    },
+    ...Array.from(room.remoteParticipants.values()).map((participant) => ({
+      identity: participant.identity,
+      isLocal: false,
+      isSpeaking: activeSpeakerIds.has(participant.identity),
+    })),
+  ];
 
-  for (const audio of audios) {
-    await applySpeakerPreferenceToAudio(audio);
-  }
+  participantCount.textContent = allParticipants.length;
 
-  if (deviceHelp) {
-    if (typeof HTMLMediaElement.prototype.setSinkId !== "function") {
-      deviceHelp.textContent = "Your browser does not support direct speaker switching. Use your phone/browser audio output controls.";
-    } else {
-      deviceHelp.textContent = loudSpeakerEnabled
-        ? "Loud speaker mode requested. Browser/device support may vary."
-        : "Ear speaker/default audio mode requested. Browser/device support may vary.";
-    }
-  }
-}
-
-async function applySpeakerPreferenceToAudio(audioElement) {
-  if (typeof audioElement.setSinkId !== "function") {
+  if (allParticipants.length === 0) {
+    participantsDiv.innerHTML = `<div class="empty">No participants yet.</div>`;
     return;
   }
 
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const outputs = devices.filter((device) => device.kind === "audiooutput");
+  allParticipants.forEach((participant) => {
+    const div = document.createElement("div");
+    div.className = `participant ${participant.isSpeaking ? "speaking" : ""}`;
+    div.innerHTML = `
+      <strong>${escapeHtml(participant.identity)} ${participant.isLocal ? "(You)" : ""}</strong>
+      <small>${participant.isSpeaking ? "Speaking" : "Connected"}</small>
+    `;
+    participantsDiv.appendChild(div);
+  });
+}
 
-    if (!outputs.length) return;
+function updateConnectedUI(roomName) {
+  setStatus(`Connected to ${roomName}`);
+  connectionDot.classList.add("connected");
 
-    const loudSpeakerDevice = outputs.find((device) => {
-      const label = device.label.toLowerCase();
-      return label.includes("speaker") || label.includes("loud");
-    });
+  usernameInput.disabled = true;
+  roomNameInput.disabled = true;
 
-    const earDevice = outputs.find((device) => {
-      const label = device.label.toLowerCase();
-      return label.includes("ear") || label.includes("receiver") || label.includes("default");
-    });
+  joinBtn.classList.add("hidden");
+  leaveBtn.classList.remove("hidden");
+  leaveBtn.disabled = false;
 
-    const selectedDevice = loudSpeakerEnabled
-      ? loudSpeakerDevice || outputs[0]
-      : earDevice || outputs[0];
-
-    await audioElement.setSinkId(selectedDevice.deviceId);
-  } catch (error) {
-    console.warn("Speaker switch not supported or blocked:", error);
-  }
+  micBtn.classList.remove("hidden");
+  micBtn.textContent = "Mute Microphone";
+  micBtn.classList.remove("muted");
 }
 
 async function leaveCall() {
-  cleanupAfterDisconnect();
-}
-
-function cleanupAfterDisconnect() {
-  if (room) {
-    room.disconnect();
-  }
-
   if (localAudioTrack) {
     localAudioTrack.stop();
     localAudioTrack = null;
   }
 
-  document.querySelectorAll("audio.remote-audio").forEach((audio) => audio.remove());
-
-  room = null;
-  micMuted = false;
-  loudSpeakerEnabled = false;
-  currentRoomName = "";
+  if (room) {
+    room.disconnect();
+  }
 
   resetUI();
 }
 
-function renderParticipants() {
-  const participantsDiv = $("participants");
-  const participantCount = $("participantCount");
-
-  if (!participantsDiv) return;
-
-  participantsDiv.innerHTML = "";
-
-  if (!room) {
-    participantsDiv.innerHTML = '<div class="empty">No participants yet.</div>';
-    if (participantCount) participantCount.textContent = "0";
-    return;
-  }
-
-  const activeSpeakerIds = new Set(room.activeSpeakers.map((p) => p.identity));
-  let count = 0;
-
-  addParticipantToUI(room.localParticipant.identity, true, activeSpeakerIds.has(room.localParticipant.identity));
-  count += 1;
-
-  room.remoteParticipants.forEach((participant) => {
-    addParticipantToUI(participant.identity, false, activeSpeakerIds.has(participant.identity));
-    count += 1;
-  });
-
-  if (participantCount) participantCount.textContent = String(count);
-}
-
-function addParticipantToUI(name, isLocal, isSpeaking) {
-  const participantsDiv = $("participants");
-  if (!participantsDiv) return;
-
-  const div = document.createElement("div");
-  div.className = `participant ${isSpeaking ? "speaking" : ""}`;
-
-  div.innerHTML = `
-    <span>${escapeHtml(name)} ${isLocal ? "(You)" : ""}</span>
-    <small>${isSpeaking ? "Speaking" : "Connected"}</small>
-  `;
-
-  participantsDiv.appendChild(div);
-}
-
-function setConnectedUI(isConnected) {
-  const usernameInput = $("username");
-  const roomNameInput = $("roomName");
-  const joinBtn = $("joinBtn");
-  const leaveBtn = $("leaveBtn");
-  const micBtn = $("micBtn");
-  const speakerBtn = $("speakerBtn");
-  const connectionDot = $("connectionDot");
-
-  if (usernameInput) usernameInput.disabled = isConnected;
-  if (roomNameInput) roomNameInput.disabled = isConnected;
-
-  if (joinBtn) joinBtn.classList.toggle("hidden", isConnected);
-  if (leaveBtn) leaveBtn.classList.toggle("hidden", !isConnected);
-
-  if (micBtn) {
-    micBtn.disabled = !isConnected;
-    micBtn.textContent = "Mute Microphone";
-  }
-
-  if (speakerBtn) {
-    speakerBtn.disabled = !isConnected;
-    speakerBtn.textContent = "Use Loud Speaker";
-  }
-
-  if (connectionDot) {
-    connectionDot.classList.toggle("online", isConnected);
-    connectionDot.classList.toggle("offline", !isConnected);
-  }
-}
-
 function resetUI() {
+  document.querySelectorAll("audio").forEach((audio) => audio.remove());
+
+  room = null;
+  localAudioTrack = null;
+  microphoneMuted = false;
+
   setStatus("Not connected");
-  setConnectedUI(false);
-  renderParticipants();
-}
+  connectionDot.classList.remove("connected");
 
-function setButtonsLoading(isLoading) {
-  const joinBtn = $("joinBtn");
-  if (!joinBtn) return;
+  usernameInput.disabled = false;
+  roomNameInput.disabled = false;
 
-  joinBtn.disabled = isLoading;
-  joinBtn.textContent = isLoading ? "Joining..." : "Join Call";
+  joinBtn.disabled = false;
+  joinBtn.classList.remove("hidden");
+
+  leaveBtn.disabled = true;
+  leaveBtn.classList.add("hidden");
+
+  micBtn.classList.add("hidden");
+  micBtn.textContent = "Mute Microphone";
+  micBtn.classList.remove("muted");
+
+  participantCount.textContent = "0";
+  participantsDiv.innerHTML = `<div class="empty">No participants yet.</div>`;
 }
 
 function setStatus(message) {
-  const statusText = $("statusText");
-  if (statusText) statusText.textContent = message;
+  statusText.textContent = message;
 }
 
 function escapeHtml(value) {
