@@ -3,8 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { AccessToken } from "livekit-server-sdk";
 
-// Load environment variables from .env file
-dotenv.config();
+ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,19 +17,14 @@ app.post("/get-token", async (req, res) => {
     const { identity, roomName } = req.body;
 
     if (!identity || !roomName) {
-      return res.status(400).json({
-        error: "identity and roomName are required",
-      });
+      return res.status(400).json({ error: "identity and roomName are required" });
     }
 
     if (!process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET || !process.env.LIVEKIT_URL) {
-      return res.status(500).json({
-        error: "LiveKit environment variables are missing. Please check your .env file.",
-      });
+      return res.status(500).json({ error: "LiveKit env values are missing. Check your .env file." });
     }
 
-    // Create LiveKit token for this user
-    const token = new AccessToken(
+    const at = new AccessToken(
       process.env.LIVEKIT_API_KEY,
       process.env.LIVEKIT_API_SECRET,
       {
@@ -39,8 +33,7 @@ app.post("/get-token", async (req, res) => {
       }
     );
 
-    // Give user permission to join, publish audio, and listen to others
-    token.addGrant({
+    at.addGrant({
       roomJoin: true,
       room: roomName,
       canPublish: true,
@@ -48,20 +41,18 @@ app.post("/get-token", async (req, res) => {
       canPublishData: true,
     });
 
-    const jwt = await token.toJwt();
+    const token = await at.toJwt();
 
     res.json({
-      token: jwt,
+      token,
       livekitUrl: process.env.LIVEKIT_URL,
     });
   } catch (error) {
-    console.error("Token generation error:", error);
-    res.status(500).json({
-      error: "Failed to generate token",
-    });
+    console.error("Token error:", error);
+    res.status(500).json({ error: "Failed to generate token" });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });

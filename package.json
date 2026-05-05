@@ -1,7 +1,6 @@
 {
-  "name": "livekit-audio-call",
+  "name": "livekit-audio-call-no-speaker",
   "version": "1.0.0",
-  "description": "Simple audio-only group call app using HTML, CSS, JavaScript, Node.js, and LiveKit.",
   "type": "module",
   "scripts": {
     "start": "node server.js",
@@ -9,8 +8,8 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "livekit-server-sdk": "^2.9.8"
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "livekit-server-sdk": "^2.9.0"
   }
 }

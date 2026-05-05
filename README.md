@@ -1,216 +1,85 @@
-# LiveKit Audio Call Project
+# LiveKit Simple Audio Call
 
-This is a simple audio-only calling app using:
+This is a simple audio-only LiveKit calling project using HTML, CSS, JavaScript, and a Node.js token server.
 
-- HTML
-- CSS
-- JavaScript
-- Node.js
-- Express
-- LiveKit
+## Features
 
-Users can join the same room and talk with each other. First 2 users can join, and later more users can join by using the same room name.
+- Join a LiveKit audio room
+- Multiple users can join the same room
+- Multiple rooms are supported by room name
+- Microphone is enabled by default after joining
+- Mute / unmute microphone button
+- Leave Call button is hidden before joining
+- Leave Call button appears only after the call is connected
+- Speaker / ear speaker switching has been removed because mobile browsers cannot reliably force that behavior
 
----
+## Setup
 
-## 1. Requirements
-
-Install these first:
-
-- Node.js
-- npm
-- LiveKit Cloud account
-
-You can create a LiveKit Cloud project here:
-
-https://cloud.livekit.io/
-
----
-
-## 2. Project files
-
-```txt
-livekit-audio-call/
-  server.js
-  package.json
-  .env.example
-  README.md
-  public/
-    index.html
-    style.css
-    app.js
-```
-
----
-
-## 3. Setup steps
-
-### Step 1: Extract ZIP file
-
-Extract the project ZIP file.
-
-Then open the folder in VS Code or your terminal.
-
-```bash
-cd livekit-audio-call
-```
-
----
-
-### Step 2: Install dependencies
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
----
+### 2. Create your `.env` file
 
-### Step 3: Create `.env` file
+Copy `.env.example` and rename it to `.env`.
 
-Copy `.env.example` and rename the copied file to `.env`.
-
-Then add your real LiveKit values:
-
-```env
-LIVEKIT_API_KEY=your_livekit_api_key_here
-LIVEKIT_API_SECRET=your_livekit_api_secret_here
-LIVEKIT_URL=wss://your-livekit-project.livekit.cloud
-PORT=3000
-
-wss://crazynaters-7dx23rhk.livekit.cloud
-APIRGoZhiE4LMoN
-1yFzWJ9pZZaaXtPjOmpn4ouRA0NarFyt1SedHsUsCeg
-LIVEKIT_URL=wss://crazynaters-7dx23rhk.livekit.cloud
-LIVEKIT_API_KEY=APIRGoZhiE4LMoN
-LIVEKIT_API_SECRET=1yFzWJ9pZZaaXtPjOmpn4ouRA0NarFyt1SedHsUsCeg
-
-LIVEKIT_URL=wss://crazynaters-7dx23rhk.livekit.cloud
-LIVEKIT_API_KEY=APIRGoZhiE4LMoN
-LIVEKIT_API_SECRET=1yFzWJ9pZZaaXtPjOmpn4ouRA0NarFyt1SedHsUsCeg
-
+```bash
+cp .env.example .env
 ```
 
-You can find these values in your LiveKit Cloud project dashboard.
+Then add your LiveKit values:
 
----
+```env
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+LIVEKIT_URL=wss://your-project.livekit.cloud
+PORT=3000
+```
 
-### Step 4: Start the project
+### 3. Start the app
 
 ```bash
 npm start
 ```
 
-You should see something like:
-
-```txt
-Server running at http://localhost:3000
-```
-
----
-
-### Step 5: Open in browser
-
-Open this URL:
+Open:
 
 ```txt
 http://localhost:3000
 ```
 
----
+## How multiple rooms work
 
-## 4. How to test with 2 users
-
-### User 1
-
-Open one browser tab:
-
-- Name: User 1
-- Room name: test-room
-- Click: Join Call
-
-### User 2
-
-Open another browser tab, another browser, or another device:
-
-- Name: User 2
-- Room name: test-room
-- Click: Join Call
-
-Both users must use the same room name.
-
----
-
-## 5. How more users can join later
-
-Any new user can join the same call by entering the same room name.
+Users with the same room name join the same call.
 
 Example:
 
 ```txt
-test-room
+Hamza joins test-room1
+Ali joins test-room1
 ```
 
-So User 3, User 4, User 5, etc. can join the same room.
+Both users are in the same call.
 
----
-
-## 6. Important security note
-
-This project is simple for learning.
-
-For production, do not let anyone generate tokens freely. You should protect `/get-token` with login/authentication so only allowed users can join rooms.
-
-Never put your LiveKit API secret inside frontend JavaScript.
-
----
-
-## 7. Common issues
-
-### Microphone permission not showing
-
-Use Chrome and allow microphone permission when the browser asks.
-
----
-
-### Users cannot hear each other
-
-Check these things:
-
-1. Both users joined the same room name.
-2. Microphone permission is allowed.
-3. LiveKit URL, API key, and API secret are correct in `.env`.
-4. Try using two different browsers or devices.
-
----
-
-### Error: LiveKit environment variables are missing
-
-Your `.env` file may be missing or incorrectly named.
-
-Correct filename:
+Different room names create separate calls:
 
 ```txt
-.env
+User A joins test-room1
+User B joins test-room2
 ```
 
-Not:
+They are in different rooms.
 
-```txt
-.env.txt
-```
+## Testing on mobile
 
----
+For microphone access, use HTTPS when testing on real devices, except localhost.
 
-### Error when running npm start
-
-Make sure dependencies are installed:
+For local network testing, use a tunnel like ngrok:
 
 ```bash
-npm install
+ngrok http 3000
 ```
 
-Then run again:
-
-```bash
-npm start
-```
+Then open the HTTPS ngrok URL on your mobile device.

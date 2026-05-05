@@ -101,11 +101,34 @@ function setupRoomEvents() {
 async function toggleMicrophone() {
   if (!localAudioTrack) return;
 
-  microphoneMuted = !microphoneMuted;
-  await localAudioTrack.setMuted(microphoneMuted);
+  const nextMutedState = !microphoneMuted;
 
-  micBtn.textContent = microphoneMuted ? "Unmute Microphone" : "Mute Microphone";
-  micBtn.classList.toggle("muted", microphoneMuted);
+  try {
+    // LiveKit browser SDK versions differ:
+    // some LocalAudioTrack versions support mute()/unmute(),
+    // while others can be controlled through the underlying MediaStreamTrack.
+    // Do NOT use setMuted() because it is not available in many LiveKit JS versions.
+    if (nextMutedState) {
+      if (typeof localAudioTrack.mute === "function") {
+        await localAudioTrack.mute();
+      } else if (localAudioTrack.mediaStreamTrack) {
+        localAudioTrack.mediaStreamTrack.enabled = false;
+      }
+    } else {
+      if (typeof localAudioTrack.unmute === "function") {
+        await localAudioTrack.unmute();
+      } else if (localAudioTrack.mediaStreamTrack) {
+        localAudioTrack.mediaStreamTrack.enabled = true;
+      }
+    }
+
+    microphoneMuted = nextMutedState;
+    micBtn.textContent = microphoneMuted ? "Unmute Microphone" : "Mute Microphone";
+    micBtn.classList.toggle("muted", microphoneMuted);
+  } catch (error) {
+    console.error("Microphone toggle failed:", error);
+    alert("Could not toggle microphone. Please check browser microphone permission.");
+  }
 }
 
 function renderParticipants() {
