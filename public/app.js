@@ -8,24 +8,30 @@ const {
 let room = null;
 let localAudioTrack = null;
 let microphoneMuted = false;
+let participantsRenderTimer = null;
 
 const usernameInput = document.getElementById("username");
 const roomNameInput = document.getElementById("roomName");
+const activeRoomText = document.getElementById("activeRoomText");
 const joinBtn = document.getElementById("joinBtn");
 const leaveBtn = document.getElementById("leaveBtn");
 const micBtn = document.getElementById("micBtn");
+const micLabel = document.getElementById("micLabel");
+const micIcon = document.getElementById("micIcon");
 const statusText = document.getElementById("statusText");
 const participantsDiv = document.getElementById("participants");
 const participantCount = document.getElementById("participantCount");
 const connectionDot = document.getElementById("connectionDot");
 
-joinBtn.addEventListener("click", joinCall);
-leaveBtn.addEventListener("click", leaveCall);
-micBtn.addEventListener("click", toggleMicrophone);
+if (joinBtn) joinBtn.addEventListener("click", joinCall);
+if (leaveBtn) leaveBtn.addEventListener("click", leaveCall);
+if (micBtn) micBtn.addEventListener("click", toggleMicrophone);
+
+updateMicButton();
 
 async function joinCall() {
-  const username = usernameInput.value.trim();
-  const roomName = roomNameInput.value.trim();
+  const username = usernameInput?.value.trim();
+  const roomName = roomNameInput?.value.trim();
 
   if (!username || !roomName) {
     alert("Please enter your name and room name.");
@@ -69,6 +75,7 @@ async function joinCall() {
 
     microphoneMuted = false;
     updateConnectedUI(roomName);
+    startParticipantsRenderLoop();
     renderParticipants();
   } catch (error) {
     console.error(error);
@@ -78,15 +85,21 @@ async function joinCall() {
 }
 
 function setupRoomEvents() {
+  if (!room) return;
+
   room.on(RoomEvent.ParticipantConnected, renderParticipants);
   room.on(RoomEvent.ParticipantDisconnected, renderParticipants);
   room.on(RoomEvent.ActiveSpeakersChanged, renderParticipants);
+  room.on(RoomEvent.TrackMuted, renderParticipants);
+  room.on(RoomEvent.TrackUnmuted, renderParticipants);
+  room.on(RoomEvent.ConnectionStateChanged, renderParticipants);
 
   room.on(RoomEvent.TrackSubscribed, (track) => {
     if (track.kind === Track.Kind.Audio) {
       const audioElement = track.attach();
       audioElement.autoplay = true;
       audioElement.playsInline = true;
+      audioElement.classList.add("remote-audio");
       document.body.appendChild(audioElement);
     }
   });
@@ -98,16 +111,26 @@ function setupRoomEvents() {
   room.on(RoomEvent.Disconnected, resetUI);
 }
 
+function startParticipantsRenderLoop() {
+  stopParticipantsRenderLoop();
+  participantsRenderTimer = setInterval(() => {
+    if (room) renderParticipants();
+  }, 180);
+}
+
+function stopParticipantsRenderLoop() {
+  if (participantsRenderTimer) {
+    clearInterval(participantsRenderTimer);
+    participantsRenderTimer = null;
+  }
+}
+
 async function toggleMicrophone() {
   if (!localAudioTrack) return;
 
   const nextMutedState = !microphoneMuted;
 
   try {
-    // LiveKit browser SDK versions differ:
-    // some LocalAudioTrack versions support mute()/unmute(),
-    // while others can be controlled through the underlying MediaStreamTrack.
-    // Do NOT use setMuted() because it is not available in many LiveKit JS versions.
     if (nextMutedState) {
       if (typeof localAudioTrack.mute === "function") {
         await localAudioTrack.mute();
@@ -123,8 +146,8 @@ async function toggleMicrophone() {
     }
 
     microphoneMuted = nextMutedState;
-    micBtn.textContent = microphoneMuted ? "Unmute Microphone" : "Mute Microphone";
-    micBtn.classList.toggle("muted", microphoneMuted);
+    updateMicButton();
+    renderParticipants();
   } catch (error) {
     console.error("Microphone toggle failed:", error);
     alert("Could not toggle microphone. Please check browser microphone permission.");
@@ -132,62 +155,102 @@ async function toggleMicrophone() {
 }
 
 function renderParticipants() {
-  if (!room) return;
+  if (!room || !participantsDiv) return;
 
-  participantsDiv.innerHTML = "";
-
-  const activeSpeakerIds = new Set(
-    room.activeSpeakers.map((participant) => participant.identity)
-  );
+  const localIsSpeaking = Boolean(room.localParticipant?.isSpeaking) || getNumericAudioLevel(room.localParticipant) > 0.04;
+  const localLevel = getVisualAudioLevel(room.localParticipant, localIsSpeaking);
 
   const allParticipants = [
     {
-      identity: room.localParticipant.identity,
+      identity: room.localParticipant.identity || "You",
       isLocal: true,
-      isSpeaking: activeSpeakerIds.has(room.localParticipant.identity),
+      isSpeaking: localIsSpeaking,
+      level: localLevel,
+      muted: microphoneMuted,
     },
-    ...Array.from(room.remoteParticipants.values()).map((participant) => ({
-      identity: participant.identity,
-      isLocal: false,
-      isSpeaking: activeSpeakerIds.has(participant.identity),
-    })),
+    ...Array.from(room.remoteParticipants.values()).map((participant) => {
+      const isSpeaking = Boolean(participant.isSpeaking) || getNumericAudioLevel(participant) > 0.04;
+      return {
+        identity: participant.identity,
+        isLocal: false,
+        isSpeaking,
+        level: getVisualAudioLevel(participant, isSpeaking),
+        muted: isParticipantMuted(participant),
+      };
+    }),
   ];
 
-  participantCount.textContent = allParticipants.length;
+  if (participantCount) {
+    participantCount.textContent = String(allParticipants.length);
+  }
 
   if (allParticipants.length === 0) {
-    participantsDiv.innerHTML = `<div class="empty">No participants yet.</div>`;
+    participantsDiv.innerHTML = getEmptyStateMarkup();
     return;
   }
 
-  allParticipants.forEach((participant) => {
-    const div = document.createElement("div");
-    div.className = `participant ${participant.isSpeaking ? "speaking" : ""}`;
-    div.innerHTML = `
-      <strong>${escapeHtml(participant.identity)} ${participant.isLocal ? "(You)" : ""}</strong>
-      <small>${participant.isSpeaking ? "Speaking" : "Connected"}</small>
-    `;
-    participantsDiv.appendChild(div);
+  participantsDiv.innerHTML = allParticipants
+    .map((participant) => createParticipantMarkup(participant))
+    .join("");
+}
+
+function createParticipantMarkup(participant) {
+  const safeIdentity = escapeHtml(participant.identity || "Guest");
+  const initials = getInitials(safeIdentity);
+  const waveMarkup = getWaveMarkup(participant.level, participant.isSpeaking && !participant.muted);
+
+  return `
+    <div class="participant-row ${participant.isSpeaking ? "active" : ""} ${participant.isLocal ? "local" : ""}">
+      <div class="avatar">${initials}</div>
+      <div class="participant-meta">
+        <div class="participant-name">${safeIdentity}</div>
+        <div class="participant-subline">
+          ${participant.isLocal ? `<span class="you-badge">You</span>` : `<span class="live-badge">Connected</span>`}
+          ${participant.muted ? `<span class="muted-badge">Muted</span>` : ``}
+        </div>
+      </div>
+      ${waveMarkup}
+    </div>
+  `;
+}
+
+function getWaveMarkup(level, active) {
+  const bars = createWaveHeights(level).map((height) => `<span style="height:${height}px"></span>`).join("");
+  return `<div class="voice-wave ${active ? "active" : ""}" aria-label="Voice activity">${bars}</div>`;
+}
+
+function createWaveHeights(level) {
+  const base = 6;
+  const amplified = Math.max(0, Math.min(1, level));
+  const values = [0.45, 0.82, 1, 0.72, 0.4];
+
+  return values.map((factor, index) => {
+    const pulse = Math.sin((Date.now() / 140) + index) * 1.4;
+    const height = base + amplified * 18 * factor + Math.max(0, pulse);
+    return Math.round(height);
   });
 }
 
 function updateConnectedUI(roomName) {
-  setStatus(`Connected to ${roomName}`);
-  connectionDot.classList.add("connected");
+  setStatus("Connected");
+  activeRoomText.textContent = roomName;
+  connectionDot?.classList.add("connected");
 
-  usernameInput.disabled = true;
-  roomNameInput.disabled = true;
+  if (usernameInput) usernameInput.disabled = true;
+  if (roomNameInput) roomNameInput.disabled = true;
 
-  joinBtn.classList.add("hidden");
-  leaveBtn.classList.remove("hidden");
-  leaveBtn.disabled = false;
-
-  micBtn.classList.remove("hidden");
-  micBtn.textContent = "Mute Microphone";
-  micBtn.classList.remove("muted");
+  joinBtn?.classList.add("hidden");
+  if (leaveBtn) {
+    leaveBtn.classList.remove("hidden");
+    leaveBtn.disabled = false;
+  }
+  micBtn?.classList.remove("hidden");
+  updateMicButton();
 }
 
 async function leaveCall() {
+  stopParticipantsRenderLoop();
+
   if (localAudioTrack) {
     localAudioTrack.stop();
     localAudioTrack = null;
@@ -202,33 +265,88 @@ async function leaveCall() {
 
 function resetUI() {
   document.querySelectorAll("audio").forEach((audio) => audio.remove());
+  stopParticipantsRenderLoop();
 
   room = null;
   localAudioTrack = null;
   microphoneMuted = false;
 
   setStatus("Not connected");
-  connectionDot.classList.remove("connected");
+  if (activeRoomText) activeRoomText.textContent = "Not joined yet";
+  connectionDot?.classList.remove("connected");
 
-  usernameInput.disabled = false;
-  roomNameInput.disabled = false;
+  if (usernameInput) usernameInput.disabled = false;
+  if (roomNameInput) roomNameInput.disabled = false;
 
-  joinBtn.disabled = false;
-  joinBtn.classList.remove("hidden");
+  if (joinBtn) {
+    joinBtn.disabled = false;
+    joinBtn.classList.remove("hidden");
+  }
 
-  leaveBtn.disabled = true;
-  leaveBtn.classList.add("hidden");
+  if (leaveBtn) {
+    leaveBtn.disabled = true;
+    leaveBtn.classList.add("hidden");
+  }
 
-  micBtn.classList.add("hidden");
-  micBtn.textContent = "Mute Microphone";
-  micBtn.classList.remove("muted");
+  micBtn?.classList.add("hidden");
+  updateMicButton();
 
-  participantCount.textContent = "0";
-  participantsDiv.innerHTML = `<div class="empty">No participants yet.</div>`;
+  if (participantCount) participantCount.textContent = "0";
+  if (participantsDiv) participantsDiv.innerHTML = getEmptyStateMarkup();
+}
+
+function updateMicButton() {
+  if (!micBtn || !micLabel || !micIcon) return;
+
+  micBtn.classList.toggle("muted", microphoneMuted);
+  micBtn.setAttribute("aria-label", microphoneMuted ? "Unmute Microphone" : "Mute Microphone");
+  micLabel.textContent = microphoneMuted ? "Unmute" : "Mute";
+  micIcon.innerHTML = microphoneMuted ? getMicOffIcon() : getMicOnIcon();
+}
+
+function isParticipantMuted(participant) {
+  if (!participant?.audioTrackPublications) return false;
+
+  for (const publication of participant.audioTrackPublications.values()) {
+    if (typeof publication.isMuted === "boolean") {
+      return publication.isMuted;
+    }
+  }
+
+  return false;
+}
+
+function getNumericAudioLevel(participant) {
+  if (!participant || typeof participant.audioLevel !== "number") return 0;
+  if (!Number.isFinite(participant.audioLevel)) return 0;
+  return Math.max(0, Math.min(1, participant.audioLevel));
+}
+
+function getVisualAudioLevel(participant, isSpeaking) {
+  const actualLevel = getNumericAudioLevel(participant);
+  if (actualLevel > 0) return actualLevel;
+  return isSpeaking ? 0.55 : 0.02;
 }
 
 function setStatus(message) {
-  statusText.textContent = message;
+  if (statusText) statusText.textContent = message;
+}
+
+function getInitials(name) {
+  const clean = String(name).trim();
+  if (!clean) return "?";
+  const words = clean.split(/\s+/).slice(0, 2);
+  return words.map((word) => word.charAt(0).toUpperCase()).join("");
+}
+
+function getEmptyStateMarkup() {
+  return `
+    <div class="empty-state">
+      <div class="empty-icon">🎙️</div>
+      <strong>No participants yet</strong>
+      <span>Join a room to start the audio call.</span>
+    </div>
+  `;
 }
 
 function escapeHtml(value) {
@@ -238,4 +356,29 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function getMicOnIcon() {
+  return `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"></path>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+      <path d="M12 19v2"></path>
+      <path d="M8 21h8"></path>
+    </svg>
+  `;
+}
+
+function getMicOffIcon() {
+  return `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 9v3a3 3 0 0 0 5.12 2.12"></path>
+      <path d="M15 7V6a3 3 0 0 0-5.72-1.24"></path>
+      <path d="M17 16.95A7 7 0 0 1 5 12v-2"></path>
+      <path d="M19 10v2c0 1.1-.25 2.15-.7 3.08"></path>
+      <path d="M12 19v2"></path>
+      <path d="M8 21h8"></path>
+      <path d="M3 3l18 18"></path>
+    </svg>
+  `;
 }
