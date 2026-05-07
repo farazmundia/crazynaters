@@ -1,96 +1,42 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LiveKit Audio Call</title>
-  <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<meta charset="UTF-8">
+<title>Video Meeting</title>
+<link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-  <main class="app-shell">
-    <section class="call-card">
-      <div class="hero-row">
-        <div>
-          <span class="eyebrow">LiveKit Voice Room</span>
-          <h1>Modern Audio Call</h1>
-          <p>Join any room name and talk with 2 or more users.</p>
-        </div>
-        <div class="status-pill">
-          <span id="connectionDot" class="status-dot"></span>
-          <span id="statusText">Not connected</span>
-        </div>
-      </div>
 
-      <div class="input-grid">
-        <label class="input-wrap">
-          <span>Your name</span>
-          <input id="username" type="text" placeholder="Enter your name" autocomplete="name" />
-        </label>
+<div class="join-container" id="joinUI">
+  <h1>Video Meeting</h1>
 
-        <label class="input-wrap">
-          <span>Room name</span>
-          <input id="roomName" type="text" placeholder="Example: team-room" value="test-room1" />
-        </label>
-      </div>
+  <input id="username" placeholder="Your Name">
+  <input id="room" placeholder="Room Name">
 
-      <div class="room-strip">
-        <div class="room-chip">
-          <span class="chip-label">Room</span>
-          <strong id="activeRoomText">Not joined yet</strong>
-        </div>
-        <div class="room-chip count-chip">
-          <span class="chip-label">Participants</span>
-          <strong id="participantCount">0</strong>
-        </div>
-      </div>
+  <button onclick="joinRoom()">Join Meeting</button>
+</div>
 
-      <div class="controls-row">
-        <button id="joinBtn" class="control-btn join" type="button" aria-label="Join Call">
-          <span class="control-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.61 2.63a2 2 0 0 1-.45 2.11L8 9.94a16 16 0 0 0 6.06 6.06l1.48-1.22a2 2 0 0 1 2.11-.45c.85.28 1.73.49 2.63.61A2 2 0 0 1 22 16.92z"></path>
-            </svg>
-          </span>
-          <span class="control-label">Join</span>
-        </button>
+<div id="meetingUI" class="hidden">
 
-        <button id="micBtn" class="control-btn mic hidden" type="button" aria-label="Mute Microphone">
-          <span class="control-icon" id="micIcon" aria-hidden="true"></span>
-          <span class="control-label" id="micLabel">Mute</span>
-        </button>
+  <div class="topbar">
+    <span id="roomLabel"></span>
+    <button onclick="leaveRoom()">Leave</button>
+  </div>
 
-        <button id="leaveBtn" class="control-btn leave hidden" type="button" aria-label="Leave Call">
-          <span class="control-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 15c2.5-2 5.33-3 8-3s5.5 1 8 3"></path>
-              <path d="M3 15l2.5 4"></path>
-              <path d="M21 15l-2.5 4"></path>
-            </svg>
-          </span>
-          <span class="control-label">Leave</span>
-        </button>
-      </div>
+  <div id="videos"></div>
 
-      <div class="participants-card">
-        <div class="participants-header">
-          <div>
-            <h2>Participants</h2>
-            <p class="participants-subtitle">Voice activity bars animate while someone is speaking.</p>
-          </div>
-        </div>
+  <div class="controls">
+    <button onclick="toggleMic()">Mic</button>
+    <button onclick="toggleCamera()">Camera</button>
+    <button onclick="shareScreen()">Share Screen</button>
+  </div>
 
-        <div id="participants" class="participants-list">
-          <div class="empty-state">
-            <div class="empty-icon">🎙️</div>
-            <strong>No participants yet</strong>
-            <span>Join a room to start the audio call.</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
+</div>
 
-  <script src="app.js"></script>
+<script src="https://unpkg.com/livekit-client/dist/livekit-client.umd.js"></script>
+<script src="app.js"></script>
+
 </body>
 </html>
