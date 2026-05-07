@@ -1,39 +1,58 @@
-const express = require("express");
-const cors = require("cors");
-const { AccessToken } = require("livekit-server-sdk");
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { AccessToken } from "livekit-server-sdk";
+
+ dotenv.config();
 
 const app = express();
-app.use(express.static("public"));
+const PORT = process.env.PORT || 3000;
+
 app.use(cors());
+app.use(express.json());
+app.use(express.static("public"));
 
-const API_KEY = "APIRGoZhiE4LMoN";
-const API_SECRET = "1yFzWJ9pZZaaXtPjOmpn4ouRA0NarFyt1SedHsUsCeg";
+app.post("/get-token", async (req, res) => {
+  try {
+    const { identity, roomName } = req.body;
 
-app.get("/getToken", async (req, res) => {
+    if (!identity || !roomName) {
+      return res.status(400).json({ error: "identity and roomName are required" });
+    }
 
-  const room = req.query.room;
-  const username = req.query.username;
+    if (!process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET || !process.env.LIVEKIT_URL) {
+      return res.status(500).json({ error: "LiveKit env values are missing. Check your .env file." });
+    }
 
-  if (!room || !username) {
-    return res.status(400).send("Missing room or username");
+    const at = new AccessToken(
+      process.env.LIVEKIT_API_KEY,
+      process.env.LIVEKIT_API_SECRET,
+      {
+        identity,
+        ttl: "1h",
+      }
+    );
+
+    at.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    });
+
+    const token = await at.toJwt();
+
+    res.json({
+      token,
+      livekitUrl: process.env.LIVEKIT_URL,
+    });
+  } catch (error) {
+    console.error("Token error:", error);
+    res.status(500).json({ error: "Failed to generate token" });
   }
-
-  const at = new AccessToken(API_KEY, API_SECRET, {
-    identity: username
-  });
-
-  at.addGrant({
-    roomJoin: true,
-    room: room,
-    canPublish: true,
-    canSubscribe: true
-  });
-
-  const token = await at.toJwt();
-
-  res.send(token);
 });
 
-app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
