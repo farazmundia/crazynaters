@@ -14,10 +14,11 @@ app.get("/getToken", async (req, res) => {
   const room = req.query.room;
   const username = req.query.username;
 
+  
   if (!room || !username) {
     return res.status(400).send("Missing room or username");
   }
-
+   
   const at = new AccessToken(API_KEY, API_SECRET, {
     identity: username
   });
