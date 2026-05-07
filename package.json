@@ -1,14 +1,15 @@
 {
-  "name": "livekit-video-app",
+  "name": "livekit-audio-call-no-speaker",
   "version": "1.0.0",
-  "description": "LiveKit multi-room video calling app",
-  "main": "server/server.js",
+  "type": "module",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "livekit-server-sdk": "^2.15.2"
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "livekit-server-sdk": "^2.9.0"
   }
 }
